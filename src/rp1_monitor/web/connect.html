@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>连接机器人 · RP1 整机监控</title>
+  <link rel="stylesheet" href="/assets/connect.css">
+  <script src="/assets/connect.js" defer></script>
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="/robots"><img src="/assets/brand/logo.png" alt="ROBO PARTY"><span>RP1 整机监控<small>LOCAL MONITOR STATION</small></span></a><a href="/robots">设备总览 <span aria-hidden="true">↗</span></a></header>
+  <main>
+    <section class="intro">
+      <p class="eyebrow">ETHERNET / READ-ONLY OBSERVER</p>
+      <h1>接入机器人，<br>让状态清晰可见。</h1>
+      <p class="description">机器人监听已开启后，输入 SSH 地址与密码。电脑后台负责接收和保存，整机、关节、电池与主机状态在同一个工作台查看。</p>
+      <ol class="flow"><li><span>01</span>网线连接机器人</li><li><span>02</span>核对 SSH 身份</li><li><span>03</span>开始只读监测</li></ol>
+      <div class="scope"><span class="dot" aria-hidden="true"></span>本机快捷工作站 · 独立 SQLite 存储<p>不会连接原生产数据库。SSH 只转发已有采集端口，不安装程序、不使能电机。</p></div>
+    </section>
+    <section class="card" aria-labelledby="connect-title">
+      <div class="card-heading"><span class="eyebrow">CONNECT YOUR RP1</span><span id="connection-badge" class="badge">尚未连接</span></div>
+      <h2 id="connect-title">连接机器人</h2><p class="muted">机器人需已启动本项目监听程序。</p>
+      <form id="connect-form">
+        <label for="ssh-target">SSH 地址</label>
+        <input id="ssh-target" name="target" value="ssh robo@192.168.137.250" required autocomplete="username" spellcheck="false">
+        <p class="hint">支持 ssh 用户名@IP，也可只填 用户名@IP。</p>
+        <label for="ssh-password">SSH 密码</label>
+        <input id="ssh-password" name="password" type="password" required autocomplete="current-password" placeholder="请输入机器人登录密码">
+        <p class="hint">密码不保存到文件、日志或浏览器存储。</p>
+        <details><summary>高级连接参数</summary><div class="ports"><div><label for="ssh-port">SSH 端口</label><input id="ssh-port" type="number" value="22" min="1" max="65535" required></div><div><label for="collector-port">机器人监听端口</label><input id="collector-port" type="number" value="8891" min="1" max="65535" required></div></div></details>
+        <fieldset id="host-key" hidden><legend>首次连接：核对设备身份</legend><p>请与设备负责人或已知记录核对以下主机指纹：</p><output id="fingerprint"></output><label class="check"><input id="trust-host" type="checkbox">已核对指纹，允许首次连接</label></fieldset>
+        <button id="connect-button" type="submit">连接并开始监测 <span aria-hidden="true">→</span></button>
+      </form>
+      <p id="status" role="status" aria-live="polite">正在读取电脑后台状态…</p>
+      <div id="connected-actions" hidden><a id="open-robot" class="primary-link" href="/robots">打开整机状态</a><button id="disconnect-button" class="secondary" type="button">断开电脑连接</button></div>
+      <p class="footnote">关闭网页或 Qt 后，电脑后台继续接收。断网后需重新连接；电脑后台退出后停止转发。缺失数据保持未知。</p>
+    </section>
+  </main>
+  <footer>RP1 MONITOR <span>机器人采集 → 网线 SSH → 电脑 relay → 本机网页</span></footer>
+</body>
+</html>

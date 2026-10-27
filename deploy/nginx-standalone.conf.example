@@ -1,0 +1,13 @@
+# Fragment inside an existing HTTPS server block. Do not replace a production config blindly.
+# Dedicated standalone monitor service is bound to 127.0.0.1:8890.
+location /monitor/ {
+    client_max_body_size 1m;
+    proxy_pass http://127.0.0.1:8890/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Request-Id $request_id;
+    proxy_connect_timeout 3s;
+    proxy_read_timeout 10s;
+}
+# HTTPS certificate/key and human-read auth are configured elsewhere.
+# This variant uses its own viewer token; cookie reuse requires the FastAPI adapter.

@@ -1,0 +1,19 @@
+# TEMPLATE: replace user and paths after checking the robot's ROS/Python environment.
+[Unit]
+Description=RP1 read-only telemetry observer
+After=network.target
+
+[Service]
+Type=simple
+User=robot
+WorkingDirectory=/opt/rp1-monitor
+EnvironmentFile=/etc/rp1-monitor/agent.env
+ExecStart=/opt/rp1-monitor/deploy/start-agent.sh
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+UMask=0077
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,101 @@
+--- a/include/robot_interface.hpp
++++ b/include/robot_interface.hpp
+@@ -57,6 +57,12 @@
+     void reset_joints(std::vector<double> joint_default_angle);
+     void set_zeros();
+     void clear_errors();
++    struct MotorHealthReading {
++        std::string joint_name, bus;
++        uint16_t motor_id;
++        rp1_health::Snapshot feedback;
++    };
++    std::vector<MotorHealthReading> get_motor_health();
+     void read_joints();
+     void read_imu();
+     void refresh_joints();
+--- a/src/robot_interface.cpp
++++ b/src/robot_interface.cpp
+@@ -483,3 +483,17 @@
+         throw std::runtime_error("Motors offline: " + offline_motors);
+     }
+ }
++
++// Low-frequency observer reads existing driver caches; never sends a bus command.
++std::vector<RobotInterface::MotorHealthReading> RobotInterface::get_motor_health() {
++    std::unique_lock<std::mutex> lock(motors_mutex_, std::try_to_lock);
++    if (!lock.owns_lock()) return {};
++    std::vector<MotorHealthReading> result;
++    for (size_t i = 0; i < motors_.size() && i < motor2urdf_.size(); ++i) {
++        if (motor2urdf_[i] < 0) continue;
++        result.push_back({"joint_" + std::to_string(motor2urdf_[i]),
++            motors_[i]->get_can_name(), static_cast<uint16_t>(motors_cfg_->motor_id_[i]),
++            motors_[i]->get_health_snapshot()});
++    }
++    return result;
++}
+--- a/src/inference_node.hpp
++++ b/src/inference_node.hpp
+@@ -31,6 +31,7 @@
+ #include "utils/latent_loader.hpp"
+ #include <std_srvs/srv/trigger.hpp>
+ #include "robot_interface.hpp"
++#include "motor_health_diagnostics.hpp"
+ 
+ enum class ObsStackOrder {
+     FrameMajor,
+@@ -162,6 +163,16 @@
+             this->create_publisher<sensor_msgs::msg::Imu>("/imu", data_qos);
+         joint_state_publisher_ =
+             this->create_publisher<sensor_msgs::msg::JointState>("/joint_states", data_qos);
++        health_publisher_ = this->create_publisher<diagnostic_msgs::msg::DiagnosticArray>("/rp1/diagnostics", data_qos);
++        health_timer_ = this->create_wall_timer(std::chrono::milliseconds(500), [this]() {
++            diagnostic_msgs::msg::DiagnosticArray message;
++            message.header.stamp = this->now();
++            for (const auto& reading : robot_->get_motor_health()) {
++                message.status.push_back(rp1_health::diagnostic(reading.feedback,
++                    reading.joint_name, reading.bus, reading.motor_id, health_epoch_));
++            }
++            health_publisher_->publish(message);
++        });
+         inference_thread_ = std::thread(&InferenceNode::inference, this);
+         control_thread_ = std::thread(&InferenceNode::control, this);
+ 
+@@ -231,6 +242,9 @@
+     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_subscription_;
+     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr action_publisher_;
+     rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_publisher_;
++    rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr health_publisher_;
++    const std::string health_epoch_ = std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
++    rclcpp::TimerBase::SharedPtr health_timer_;
+     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_state_publisher_;
+     rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr clear_depth_history_client_;
+     std::thread inference_thread_;
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -19,6 +19,7 @@
+ find_package(rclcpp REQUIRED)
+ find_package(std_msgs REQUIRED)
+ find_package(sensor_msgs REQUIRED)
++find_package(diagnostic_msgs REQUIRED)
+ find_package(geometry_msgs REQUIRED)
+ find_package(std_srvs REQUIRED)
+ find_package(Boost COMPONENTS system)
+@@ -69,7 +70,7 @@
+   ${CNPY_INCLUDE_DIR}
+ )
+ target_link_libraries(inference_node PUBLIC ${PUBLIC_DEPENDENCIES} utils cnpy robot)
+-ament_target_dependencies(inference_node PUBLIC rclcpp std_msgs sensor_msgs geometry_msgs std_srvs)
++ament_target_dependencies(inference_node PUBLIC rclcpp std_msgs sensor_msgs geometry_msgs std_srvs diagnostic_msgs)
+ 
+ set_target_properties(inference_node PROPERTIES LINK_FLAGS "-Wl,--no-as-needed")
+ 
+--- a/package.xml
++++ b/package.xml
+@@ -13,6 +13,7 @@
+   <depend>ament_index_cpp</depend>
+   <depend>std_msgs</depend>
+   <depend>sensor_msgs</depend>
++  <depend>diagnostic_msgs</depend>
+   <depend>geometry_msgs</depend>
+   <depend>std_srvs</depend>
+   <depend>roboparty_imu</depend>

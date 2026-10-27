@@ -1,0 +1,168 @@
+--- /dev/null
++++ b/include/motor_health_snapshot.hpp
+@@ -0,0 +1,64 @@
++// SPDX-License-Identifier: GPL-3.0
++#pragma once
++#include <chrono>
++#include <cstdint>
++#include <limits>
++#include <mutex>
++#include <linux/can.h>
++
++namespace rp1_health {
++enum class Protocol { unknown, lro, rp };
++struct Snapshot {
++    bool valid = false;
++    Protocol protocol = Protocol::unknown;
++    float motor_temperature = std::numeric_limits<float>::quiet_NaN();
++    float mos_temperature = std::numeric_limits<float>::quiet_NaN();
++    uint32_t fault_code = 0;
++    uint64_t sequence = 0;
++    std::chrono::steady_clock::time_point received_at{};
++};
++inline bool valid_id(const canfd_frame& frame, uint32_t expected) {
++    return !(frame.can_id & (CAN_EFF_FLAG | CAN_RTR_FLAG | CAN_ERR_FLAG)) &&
++           (frame.can_id & CAN_SFF_MASK) == expected;
++}
++inline bool decode_lro(const canfd_frame& frame, uint16_t motor_id, Snapshot& out) {
++    if (!valid_id(frame, motor_id) || frame.len < 8 || frame.len > 64 ||
++        ((frame.data[0] >> 5) & 7) != 1) return false;
++    out.protocol = Protocol::lro;
++    out.motor_temperature = static_cast<int>(frame.data[6]) - 25;
++    out.mos_temperature = static_cast<int>(frame.data[7]) - 25;
++    out.fault_code = frame.data[0] & 0x1f;
++    return true;
++}
++inline int16_t signed16(const uint8_t* value) {
++    const uint16_t raw = (static_cast<uint16_t>(value[0]) << 8) | value[1];
++    return static_cast<int16_t>(raw >= 32768 ? static_cast<int>(raw) - 65536 : raw);
++}
++inline bool decode_rp(const canfd_frame& frame, uint16_t motor_id, Snapshot& out) {
++    if (!valid_id(frame, 0x410 + motor_id) || frame.len < 19 || frame.len > 64 || frame.data[0] != 6) return false;
++    out.protocol = Protocol::rp;
++    out.fault_code = (static_cast<uint16_t>(frame.data[3]) << 8) | frame.data[4];
++    out.motor_temperature = signed16(frame.data + 15) * 0.01f;
++    out.mos_temperature = signed16(frame.data + 17) * 0.01f;
++    return true;
++}
++class Cache {
++    mutable std::mutex mutex_;
++    Snapshot snapshot_;
++public:
++    // Feedback callback never waits behind a reader. A contended health sample is skipped.
++    bool store(Snapshot next) {
++        std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);
++        if (!lock.owns_lock()) return false;
++        next.valid = true;
++        next.sequence = snapshot_.sequence + 1;
++        next.received_at = std::chrono::steady_clock::now();
++        snapshot_ = next;
++        return true;
++    }
++    Snapshot read() const {
++        std::lock_guard<std::mutex> lock(mutex_);
++        return snapshot_;
++    }
++};
++}
+--- /dev/null
++++ b/include/motor_health_diagnostics.hpp
+@@ -0,0 +1,39 @@
++// SPDX-License-Identifier: GPL-3.0
++#pragma once
++#include "motor_health_snapshot.hpp"
++#include <diagnostic_msgs/msg/diagnostic_array.hpp>
++#include <string>
++
++namespace rp1_health {
++inline diagnostic_msgs::msg::DiagnosticStatus diagnostic(
++    const Snapshot& snapshot, const std::string& joint, const std::string& bus,
++    uint16_t motor_id, const std::string& epoch) {
++    diagnostic_msgs::msg::DiagnosticStatus status;
++    status.name = "rp1/motor/" + joint;
++    status.hardware_id = bus + ":" + std::to_string(motor_id);
++    const double age_ms = snapshot.valid ? std::chrono::duration<double, std::milli>(
++        std::chrono::steady_clock::now() - snapshot.received_at).count() : -1;
++    const bool valid = snapshot.valid && age_ms >= 0 && age_ms <= 5000;
++    status.level = !valid ? 3 : snapshot.fault_code ? 2 : 0;
++    status.message = !valid ? "No fresh validated feedback" : "Observed raw feedback; health limits not evaluated";
++    const auto add = [&](const std::string& key, const std::string& value) {
++        diagnostic_msgs::msg::KeyValue field;
++        field.key = key; field.value = value;
++        status.values.push_back(field);
++    };
++    add("schema_version", "1"); add("joint_name", joint); add("bus", bus);
++    add("motor_id", std::to_string(motor_id)); add("producer_epoch", epoch);
++    add("protocol", snapshot.protocol == Protocol::lro ? "lro" : snapshot.protocol == Protocol::rp ? "rp" : "unknown");
++    add("valid", valid ? "true" : "false");
++    add("feedback_sequence", std::to_string(snapshot.sequence));
++    add("feedback_age_ms", std::to_string(age_ms));
++    for (const auto* key : {"motor_temperature", "mos_temperature", "fault_code"})
++        add(std::string(key) + "_valid", valid ? "true" : "false");
++    if (valid) {
++        add("motor_temperature", std::to_string(snapshot.motor_temperature));
++        add("mos_temperature", std::to_string(snapshot.mos_temperature));
++        add("fault_code", std::to_string(snapshot.fault_code));
++    }
++    return status;
++}
++}
+--- a/include/motor_driver.hpp
++++ b/include/motor_driver.hpp
+@@ -2,6 +2,7 @@
+ // Copyright (C) 2026 Luo1imasi
+ 
+ #pragma once
++#include "motor_health_snapshot.hpp"
+ // #include <spdlog/sinks/basic_file_sink.h>
+ #include <spdlog/spdlog.h>
+ #include <stdint.h>
+@@ -299,7 +300,10 @@
+      */
+     virtual float get_motor_temperature() { return motor_temperature_; }
+ 
++    rp1_health::Snapshot get_health_snapshot() const { return health_cache_.read(); }
++
+    protected:
++    rp1_health::Cache health_cache_;
+     std::shared_ptr<spdlog::logger> logger_;
+     uint16_t motor_id_{0};
+ 
+--- a/src/drivers/lro/lro_motor_driver.cpp
++++ b/src/drivers/lro/lro_motor_driver.cpp
+@@ -136,6 +136,8 @@
+ }
+ 
+ void LroMotorDriver::canfd_rx_cbk(const canfd_frame& rx_frame) {
++    rp1_health::Snapshot health;
++    if (!rp1_health::decode_lro(rx_frame, motor_id_, health)) return;
+     {
+         response_count_ = 0;
+     }
+@@ -161,6 +163,7 @@
+         range_map(t_int, uint16_t(0), bitmax<uint16_t>(12), -limit_param_.TauMax, limit_param_.TauMax);
+     mos_temperature_ = static_cast<float>(static_cast<int>(rx_frame.data[7]) - 25);
+     motor_temperature_ = static_cast<float>(static_cast<int>(rx_frame.data[6]) - 25); // Temperature: value - 25 = actual temperature
++    health_cache_.store(health);
+ }
+ 
+ // void LroMotorDriver::ethercat_rx_cbk(const ethercat_frame& rx_frame) {}
+--- a/src/drivers/rp/rp_motor_driver.cpp
++++ b/src/drivers/rp/rp_motor_driver.cpp
+@@ -186,6 +186,8 @@
+ }
+ 
+ void RPMotorDriver::canfd_rx_cbk(const canfd_frame& rx_frame) {
++    rp1_health::Snapshot health;
++    if (!rp1_health::decode_rp(rx_frame, motor_id_, health)) return;
+     {
+         response_count_ = 0;
+     }
+@@ -211,6 +213,7 @@
+     motor_current_ = static_cast<float>(current_int) * 0.01f;
+     motor_temperature_ = static_cast<float>(read_be_i16(&rx_frame.data[15])) * 0.01f;
+     mos_temperature_ = static_cast<float>(read_be_i16(&rx_frame.data[17])) * 0.01f;
++    health_cache_.store(health);
+ }
+ 
+ void RPMotorDriver::motor_mit_cmd(float* f_p, float* f_v, float* f_kp, float* f_kd, float* f_t) {
