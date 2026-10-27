@@ -6,7 +6,17 @@ cd "$project_root"
 mode=${1:-desktop}
 case "$mode" in desktop|web|setup) ;; *) echo '用法：./start-monitor.sh [desktop|web|setup]' >&2; exit 2;; esac
 if [[ ! -x .venv/bin/python ]]; then
-  python3 -m venv .venv
+  python3 -m venv --without-pip .venv
+fi
+if ! .venv/bin/python -m pip --version >/dev/null 2>&1; then
+  if ! .venv/bin/python -m ensurepip >.venv/bootstrap.log 2>&1; then
+    if python3 -m pip --version >/dev/null 2>&1; then
+      python3 -m pip --python "$project_root/.venv/bin/python" install pip
+    else
+      echo '需要python3-venv或可用的python3-pip来准备项目环境；未修改系统。' >&2
+      exit 1
+    fi
+  fi
 fi
 if ! .venv/bin/python -c 'import sys, rp1_monitor, paramiko, PySide6, pyqtgraph, fastapi, uvicorn, sqlalchemy; from pathlib import Path; sys.exit(Path(rp1_monitor.__file__).resolve().parent != Path(sys.argv[1]).resolve())' "$project_root/src/rp1_monitor" >/dev/null 2>&1; then
   .venv/bin/python -m pip install -e '.[desktop,server,station]'

@@ -10,7 +10,7 @@ cd rp1-test-monitor
 ./start-monitor.sh
 ```
 
-首次在本项目`.venv/`准备依赖，需要电脑能访问Python包源，并已安装Python 3.10+及venv组件；缺少系统组件时按电脑维护流程补齐，脚本不会使用sudo或apt。后续依赖齐全时直接启动。
+首次在本项目`.venv/`准备依赖，需要电脑能访问Python包源，并已安装Python 3.10+及venv组件。若缺少ensurepip而系统已有pip，脚本只向项目虚拟环境安装pip；两者都没有时按电脑维护流程补齐。脚本不会使用sudo或apt，后续依赖齐全时直接启动。
 
 上位机会打开设备设置，默认选择“SSH地址与密码（电脑后台接入）”：
 
@@ -87,11 +87,12 @@ RP1_WHEELHOUSE=/实际离线wheel目录 bash scripts/install-robot.sh
 
 ### 首次安装具体写哪些文件
 
-所有内容都在普通用户的新目录`~/.local/share/rp1-monitor/github/`：
+监控安装及运行内容都在普通用户的新目录`~/.local/share/rp1-monitor/github/`；Git克隆源码另存在执行clone时的位置：
 
 | 文件/目录 | 用途 |
 | --- | --- |
 | `.venv/` | 独立Python及agent依赖；读取已有ROS包，不改系统Python |
+| `.tmp/`、`.pip-cache/` | 本次安装的临时构建和下载缓存，不使用原运控目录 |
 | `profile.json` | 设备身份、版本、待确认电机映射与进程名单；应由维护者按实填写 |
 | `observer-config.json` | ROS路径、已确认DDS环境、可选TUI执行器；无中央地址或凭据 |
 | `start-observer.sh` | CPU限制、锁和端口检查后的手动启动入口 |

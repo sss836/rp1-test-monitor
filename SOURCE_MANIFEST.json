@@ -114,8 +114,8 @@
       "sha256": "a3c45605eece70d7f1e9bcd6c8fe7c83cd632c59889f8c3c91efb7aecad55e87"
     },
     "docs/GITHUB_QUICKSTART.md": {
-      "bytes": 8998,
-      "sha256": "e50312c2bee4e8d3b79c25d8a60f8d329aa41a7413c6f3ef7c854856ffefc0a0"
+      "bytes": 9241,
+      "sha256": "72b938b20889880cedf11bacf15dc230d8b98b4a90d8c4a43deb898c3d4311cb"
     },
     "docs/GITHUB_README.md": {
       "bytes": 3986,
@@ -166,8 +166,8 @@
       "sha256": "8b71d93070c104304334fab62c4030728430d86584055a391530a0c33cc977f4"
     },
     "docs/QUICK_CONNECT_VERIFICATION.md": {
-      "bytes": 2340,
-      "sha256": "df7f5cf56e643831ea050bef74344472e631077e2f4f981980df7e99b92891f4"
+      "bytes": 2575,
+      "sha256": "19283f30d0eb7ca0f5620bacfc4c8d0a95d9b22556689875aec85980dcadc03f"
     },
     "docs/ROBOPI_TUI_INTEGRATION.md": {
       "bytes": 8949,
@@ -354,8 +354,8 @@
       "sha256": "6887536c93b209d0038fcaa88ed38e2299810cbd463aa57be99157117845752d"
     },
     "scripts/install-robot.sh": {
-      "bytes": 2351,
-      "sha256": "5b90e013a9623f636a08bcce896fef21dd35d1f65acf8760e537beb1912fc78d"
+      "bytes": 2820,
+      "sha256": "e92774b9332da51249ee0a7e38bae11cfbe176b0866aad6cca3bb2f88833eac9"
     },
     "scripts/run_central_preview.py": {
       "bytes": 4849,
@@ -710,8 +710,8 @@
       "sha256": "66ee7230a3eed3ae583ce9a62cd584939894dd49ada6f4c90528f1c54f455f87"
     },
     "start-monitor.sh": {
-      "bytes": 1261,
-      "sha256": "5f16f28fbed1e5247c80bfc2a3170ec7f90a82d19aa059331a5b7de6f22e20a7"
+      "bytes": 1672,
+      "sha256": "437bf3626f2d62c0801c8f835d0fcd81988860aa8b5f325b5bdce6dfae597062"
     },
     "tests/conftest.py": {
       "bytes": 3138,
