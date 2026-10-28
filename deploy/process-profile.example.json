@@ -1,8 +1,0 @@
-{
-  "schema_version": 1,
-  "robot_id": "RP1-001",
-  "processes": [
-    {"key": "motion", "label": "运控（待核对）", "comm": "REPLACE_MOTION"},
-    {"key": "driver", "label": "驱动（待核对）", "comm": "REPLACE_DRIVER"}
-  ]
-}

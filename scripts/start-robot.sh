@@ -42,4 +42,4 @@ fi
 args=(agent --source ros2 --robot-id "$observer_robot_id" --profile "$monitor_base/profile.json"
   --state-dir "$monitor_base/state" --cache-mib 128 --reserve-mib 512 --port 8891)
 if [[ -n "$observer_tui_executor" ]]; then args+=(--robopi-tui-executor "$observer_tui_executor"); fi
-exec nice -n 10 "$monitor_base/.venv/bin/python" -B -m rp1_monitor "${args[@]}"
+exec nice -n 10 "$monitor_base/.venv/bin/python" -B -m rp1_robot "${args[@]}"
